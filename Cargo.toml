@@ -11,3 +11,4 @@ env_logger = { version = "0.10", default-features = false, features = [
     "humantime",
 ] }
 egui_extras = { version = "0.28.1", features = ["default", "image"] }
+anyhow = "1.0.86"

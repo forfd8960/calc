@@ -94,11 +94,16 @@ impl eframe::App for MyApp {
                     }
                 });
                 ui.horizontal(|ui| {
-                    if ui.button("0").clicked() {
+                    let btn = ui.button("0");
+                    if btn.clicked() {
                         self.exp.push_str("0");
                     }
+
                     if ui.button(format!(".")).clicked() {
                         self.exp.push_str(".");
+                    }
+                    if ui.button("=").clicked() {
+                        self.exp.push_str("=");
                     }
                 });
 
