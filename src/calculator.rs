@@ -65,23 +65,11 @@ impl Caculator {
             let ch = self.chars[idx];
             match ch {
                 '0'..='9' => {
-                    let mut num = String::new();
-                    num.push(ch);
-                    idx += 1;
-                    while idx < self.chars.len() {
-                        let ch = self.chars[idx];
-                        if ch == '.' {
-                            num.push(ch);
-                            idx += 1;
-                        } else if ch.is_ascii_digit() {
-                            num.push(ch);
-                            idx += 1;
-                        } else {
-                            break;
-                        }
-                    }
+                    let (num, new_idx) = self.parse_num(ch, idx);
                     tokens.push(Token::Num(num.parse()?));
+                    idx = new_idx;
                 }
+                ' ' | '\n' | '\t' | '\r' => idx += 1,
                 '+' | '-' | '*' | '/' | '^' | '(' | ')' => {
                     tokens.push(Token::Op(ch));
                     idx += 1;
@@ -93,6 +81,29 @@ impl Caculator {
         }
 
         Ok(tokens)
+    }
+
+    fn parse_num(&self, ch: char, idx: usize) -> (String, usize) {
+        let mut num = String::new();
+        num.push(ch);
+
+        let mut new_idx = idx;
+        new_idx += 1;
+
+        while new_idx < self.chars.len() {
+            let ch = self.chars[new_idx];
+            if ch == '.' {
+                num.push(ch);
+                new_idx += 1;
+            } else if ch.is_ascii_digit() {
+                num.push(ch);
+                new_idx += 1;
+            } else {
+                break;
+            }
+        }
+
+        (num, new_idx)
     }
 }
 
@@ -112,6 +123,42 @@ mod tests {
         assert_eq!(tokens[2], Token::Num(2 as f64));
         assert_eq!(tokens[3], Token::Op('*'));
         assert_eq!(tokens[4], Token::Num(3 as f64));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_tokens1() -> anyhow::Result<()> {
+        let exp = "1.099+2.5*3.89";
+        let caculator = Caculator::new(exp.to_string());
+        let tokens = caculator.parse_chars()?;
+
+        assert_eq!(tokens.len(), 5);
+        assert_eq!(tokens[0], Token::Num(1.099 as f64));
+        assert_eq!(tokens[1], Token::Op('+'));
+        assert_eq!(tokens[2], Token::Num(2.5 as f64));
+        assert_eq!(tokens[3], Token::Op('*'));
+        assert_eq!(tokens[4], Token::Num(3.89 as f64));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_tokens2() -> anyhow::Result<()> {
+        let exp = "1.099 + 2.5 * (3.89 - 1)";
+        let caculator = Caculator::new(exp.to_string());
+        let tokens = caculator.parse_chars()?;
+
+        assert_eq!(tokens.len(), 9);
+        assert_eq!(tokens[0], Token::Num(1.099 as f64));
+        assert_eq!(tokens[1], Token::Op('+'));
+        assert_eq!(tokens[2], Token::Num(2.5 as f64));
+        assert_eq!(tokens[3], Token::Op('*'));
+        assert_eq!(tokens[4], Token::Op('('));
+        assert_eq!(tokens[5], Token::Num(3.89 as f64));
+        assert_eq!(tokens[6], Token::Op('-'));
+        assert_eq!(tokens[7], Token::Num(1 as f64));
+        assert_eq!(tokens[8], Token::Op(')'));
 
         Ok(())
     }
