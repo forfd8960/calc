@@ -10,4 +10,6 @@ pub enum CaculatorError {
     InvalidExpression(String),
     #[error("divide by zero")]
     DivideByZero,
+    #[error("unbalanced parenthesis")]
+    UnBalancedParenthesis,
 }

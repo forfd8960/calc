@@ -126,7 +126,7 @@ impl Caculator {
                         idx += 1;
                     }
                     ')' => {
-                        idx = self.pop_util_left_parenthesis(&tokens, idx)?;
+                        idx = self.pop_util_left_parenthesis(idx)?;
                     }
                     _ => {
                         idx = self.push_or_calc(op, idx)?;
@@ -144,36 +144,75 @@ impl Caculator {
         Ok(r.unwrap())
     }
 
-    fn pop_util_left_parenthesis(
-        &mut self,
-        tokens: &Vec<Token>,
-        idx: usize,
-    ) -> anyhow::Result<usize> {
-        Ok(idx)
+    fn pop_util_left_parenthesis(&mut self, idx: usize) -> anyhow::Result<usize> {
+        loop {
+            if self.op_stack.len() < 1 {
+                bail!(CaculatorError::UnBalancedParenthesis);
+            }
+
+            let op = self.op_stack.pop_back();
+            if op.is_none() {
+                bail!(CaculatorError::InvalidExpression(self.exp.clone()));
+            }
+            let operator = op.unwrap();
+            if operator == '(' {
+                break;
+            }
+
+            self.calc_with_op(operator)?;
+        }
+
+        Ok(idx + 1)
     }
 
+    // push or do calculation
+    // 1. if there are no operators in the operator stack, push the new operator into the operator stack,
+    // 2. else if current operator has higher precendence than the new operator: op,
+    // then do calculation with current op in the stack, and pop the current op.
+    // 3. then push the new operator into the operator stack
     fn push_or_calc(&mut self, op: char, idx: usize) -> anyhow::Result<usize> {
-        Ok(idx)
+        if self.op_stack.len() < 1 {
+            self.op_stack.push_back(op);
+            return Ok(idx + 1);
+        }
+
+        let current_op = self.op_stack.back().unwrap();
+        let current_prec = PRECEDENCE.get(current_op).unwrap();
+        let new_prec = PRECEDENCE.get(&op).unwrap();
+        if current_prec >= new_prec {
+            self.calc_with_op(*current_op)?;
+            self.op_stack.pop_back();
+        }
+
+        self.op_stack.push_back(op);
+        Ok(idx + 1)
     }
 
     fn pop_all_operators(&mut self) -> anyhow::Result<()> {
+        if self.op_stack.len() < 1 {
+            return Ok(());
+        }
+
+        loop {
+            if self.op_stack.len() < 1 {
+                break;
+            }
+
+            let op = self.op_stack.pop_back().unwrap();
+            self.calc_with_op(op)?;
+        }
         Ok(())
     }
 
-    fn pop_and_calc(&mut self) -> anyhow::Result<()> {
-        let op = self.op_stack.pop_back();
-        if op.is_none() {
-            bail!(CaculatorError::InvalidExpression(self.exp.clone()));
-        }
-
-        let operator = op.unwrap();
-
+    fn calc_with_op(&mut self, operator: char) -> anyhow::Result<()> {
         if self.result.len() < 2 {
             bail!(CaculatorError::MissingOperand(operator, 2));
         }
 
         let num2 = self.result.pop_back().unwrap();
         let num1 = self.result.pop_back().unwrap();
+
+        println!("pop {} and {} from result stack", num1, num2);
 
         let result = match operator {
             '+' => num1 + num2,
@@ -189,6 +228,8 @@ impl Caculator {
             _ => bail!(CaculatorError::UnsupportedOperator(operator)),
         };
 
+        println!("push result: {} into result stack", result);
+
         self.result.push_back(result);
         Ok(())
     }
@@ -196,6 +237,8 @@ impl Caculator {
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use super::*;
 
     #[test]
@@ -251,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pop_and_calc() -> anyhow::Result<()> {
+    fn test_calc_with_op() -> anyhow::Result<()> {
         let exp = "";
         let mut caculator = Caculator::new(exp.to_string());
 
@@ -264,16 +307,85 @@ mod tests {
         ];
 
         for case in t_cases {
-            caculator.op_stack.push_back(case.0);
             caculator.result.push_back(case.1);
             caculator.result.push_back(case.2);
 
-            caculator.pop_and_calc()?;
+            caculator.calc_with_op(case.0)?;
             let r = caculator.result.pop_back();
             println!("{:?}, {:?}", case, r);
             assert_eq!(r, case.3);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_push_or_calc() -> anyhow::Result<()> {
+        let exp = "1 + 8 - 6";
+        let mut caculator = Caculator::new(exp.to_string());
+
+        caculator.op_stack = VecDeque::from(vec![]);
+        caculator.result = VecDeque::from(vec![1 as f64]);
+        let t_cases = vec![
+            (
+                '+',
+                8 as f64,                                 // operand to push
+                VecDeque::from(vec!['+']),                // expect op stack
+                VecDeque::from(vec![1 as f64, 8 as f64]), // expect result
+            ),
+            (
+                '-',
+                6 as f64,
+                VecDeque::from(vec!['-']),           // expect op stack
+                VecDeque::from(vec![9.0, 6 as f64]), // result
+            ),
+        ];
+
+        for tc in t_cases {
+            caculator.push_or_calc(tc.0, 0)?;
+            caculator.result.push_back(tc.1);
+
+            assert_eq!(caculator.op_stack, tc.2);
+            assert_eq!(caculator.result, tc.3);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calcuate() -> anyhow::Result<()> {
+        let exp = "1 + 8 - 6";
+        let mut caculator = Caculator::new(exp.to_string());
+        let r = caculator.calculate()?;
+        assert_eq!(r, 3.0);
+
+        let t_cases = vec![
+            ("1 + 8 - 6", 3.0),
+            ("1 + 8 - 6 * 2", -3.0),
+            ("1 + 8 - 6 * 2 / 2", 3.0),
+            ("2^10", 1024.0),
+            ("2*10", 20.0),
+            ("2/10", 0.2),
+            ("2/10 + 10", 10.2),
+            ("2/10 + 10 - 2", 8.2),
+            ("(99 + 1) * (1 - 0.9) / 2^3", 1.2499999999999998),
+        ];
+
+        for tc in t_cases {
+            let mut caculator = Caculator::new(tc.0.to_string());
+            let r = caculator.calculate()?;
+            assert_eq!(r, tc.1, "exp: {} is not equal to {}", tc.0, tc.1);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calcuate1() -> anyhow::Result<()> {
+        let exp = "(99 + 1) * (1 - 0.9) / 2^3";
+        let mut caculator = Caculator::new(exp.to_string());
+        let r = caculator.calculate()?;
+        assert_eq!(r, 1.2499999999999998);
         Ok(())
     }
 }
