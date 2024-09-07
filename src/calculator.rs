@@ -1,23 +1,23 @@
-use std::collections::{HashMap, VecDeque};
-
 use anyhow::{bail, Result};
-
-use std::sync::LazyLock;
+use lazy_static::lazy_static;
+use std::collections::{HashMap, VecDeque};
 
 use crate::errors::CaculatorError;
 
 // operator precendence
-static PRECEDENCE: LazyLock<HashMap<char, u8>> = LazyLock::new(|| {
-    HashMap::from([
-        ('+', 2),
-        ('-', 1),
-        ('*', 4),
-        ('/', 3),
-        ('^', 5),
-        ('(', 0),
-        (')', 6),
-    ])
-});
+lazy_static! {
+    static ref PRECEDENCE: HashMap<char, u8> = {
+        HashMap::from([
+            (')', 6),
+            ('^', 5),
+            ('*', 4),
+            ('/', 3),
+            ('+', 2),
+            ('-', 1),
+            ('(', 0),
+        ])
+    };
+}
 
 #[derive(Debug, PartialEq)]
 enum Token {
@@ -45,8 +45,9 @@ impl Caculator {
         }
     }
 
-    pub fn calculate(&self) -> Result<f64> {
-        todo!()
+    pub fn calculate(&mut self) -> Result<f64> {
+        let tokens = self.parse_chars()?;
+        self.do_calculation(tokens)
     }
 
     fn parse_chars(&self) -> anyhow::Result<Vec<Token>> {
@@ -105,6 +106,92 @@ impl Caculator {
 
         (num, new_idx)
     }
+
+    fn do_calculation(&mut self, tokens: Vec<Token>) -> Result<f64> {
+        let mut idx = 0;
+        loop {
+            if idx >= tokens.len() {
+                break;
+            }
+
+            let token = tokens.get(idx).unwrap();
+            match *token {
+                Token::Num(num) => {
+                    self.result.push_back(num);
+                    idx += 1;
+                }
+                Token::Op(op) => match op {
+                    '(' => {
+                        self.op_stack.push_back(op);
+                        idx += 1;
+                    }
+                    ')' => {
+                        idx = self.pop_util_left_parenthesis(&tokens, idx)?;
+                    }
+                    _ => {
+                        idx = self.push_or_calc(op, idx)?;
+                    }
+                },
+            }
+        }
+
+        self.pop_all_operators()?;
+        let r = self.result.pop_back();
+        if r.is_none() {
+            bail!(CaculatorError::InvalidExpression(self.exp.clone()));
+        }
+
+        Ok(r.unwrap())
+    }
+
+    fn pop_util_left_parenthesis(
+        &mut self,
+        tokens: &Vec<Token>,
+        idx: usize,
+    ) -> anyhow::Result<usize> {
+        Ok(idx)
+    }
+
+    fn push_or_calc(&mut self, op: char, idx: usize) -> anyhow::Result<usize> {
+        Ok(idx)
+    }
+
+    fn pop_all_operators(&mut self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn pop_and_calc(&mut self) -> anyhow::Result<()> {
+        let op = self.op_stack.pop_back();
+        if op.is_none() {
+            bail!(CaculatorError::InvalidExpression(self.exp.clone()));
+        }
+
+        let operator = op.unwrap();
+
+        if self.result.len() < 2 {
+            bail!(CaculatorError::MissingOperand(operator, 2));
+        }
+
+        let num2 = self.result.pop_back().unwrap();
+        let num1 = self.result.pop_back().unwrap();
+
+        let result = match operator {
+            '+' => num1 + num2,
+            '-' => num1 - num2,
+            '*' => num1 * num2,
+            '/' => {
+                if num2 == 0.0 {
+                    bail!(CaculatorError::DivideByZero);
+                }
+                num1 / num2
+            }
+            '^' => num1.powf(num2),
+            _ => bail!(CaculatorError::UnsupportedOperator(operator)),
+        };
+
+        self.result.push_back(result);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -159,6 +246,33 @@ mod tests {
         assert_eq!(tokens[6], Token::Op('-'));
         assert_eq!(tokens[7], Token::Num(1 as f64));
         assert_eq!(tokens[8], Token::Op(')'));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_pop_and_calc() -> anyhow::Result<()> {
+        let exp = "";
+        let mut caculator = Caculator::new(exp.to_string());
+
+        let t_cases = vec![
+            ('*', 40.96 as f64, 100 as f64, Some(4096 as f64)),
+            ('/', 1996 as f64, 100 as f64, Some(19.96 as f64)),
+            ('+', 99 as f64, 1 as f64, Some(100 as f64)),
+            ('-', 33 as f64, 1 as f64, Some(32 as f64)),
+            ('^', 2 as f64, 10 as f64, Some(1024 as f64)),
+        ];
+
+        for case in t_cases {
+            caculator.op_stack.push_back(case.0);
+            caculator.result.push_back(case.1);
+            caculator.result.push_back(case.2);
+
+            caculator.pop_and_calc()?;
+            let r = caculator.result.pop_back();
+            println!("{:?}, {:?}", case, r);
+            assert_eq!(r, case.3);
+        }
 
         Ok(())
     }

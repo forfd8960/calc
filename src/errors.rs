@@ -2,8 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CaculatorError {
-    #[error("invalid operand")]
-    MissingOperand,
+    #[error("operator: {0} need {1} operands")]
+    MissingOperand(char, u8),
     #[error("unsupported operator: {0}")]
     UnsupportedOperator(char),
     #[error("invalid expression: {0}")]
