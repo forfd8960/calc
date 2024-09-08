@@ -31,7 +31,6 @@ pub struct Caculator {
     pub chars: Vec<char>,
     pub result: VecDeque<f64>,
     pub op_stack: VecDeque<char>,
-    pub current: usize,
 }
 
 impl Caculator {
@@ -41,11 +40,11 @@ impl Caculator {
             chars: exp.chars().collect(),
             result: VecDeque::new(),
             op_stack: VecDeque::new(),
-            current: 0,
         }
     }
 
     pub fn calculate(&mut self) -> Result<f64> {
+        println!("calculate: {}", self.exp);
         let tokens = self.parse_chars()?;
         self.do_calculation(tokens)
     }
